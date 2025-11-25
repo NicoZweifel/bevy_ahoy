@@ -28330,10 +28330,3 @@
 "classname" "spawn_player"
 "origin" "-13936 8 12936"
 }
-{
-"classname" "light_directional"
-"angles" "45 -120 -179"
-"illuminance" "7000"
-"shadows_enabled" "true"
-"origin" "96 64 48"
-}
