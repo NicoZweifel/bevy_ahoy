@@ -246,7 +246,7 @@ fn run_kcc(
 fn depenetrate_character(
     transform: &mut Transform,
     move_and_slide: &MoveAndSlide,
-    state: &mut CharacterControllerState,
+    state: &CharacterControllerState,
     ctx: &Ctx,
 ) {
     let offset = move_and_slide.depenetrate(
@@ -500,14 +500,7 @@ fn snap_to_ground(
         return;
     }
     transform.translation = start + cast_dir * hit.distance;
-    let offset = move_and_slide.depenetrate(
-        state.collider(),
-        transform.translation,
-        transform.rotation,
-        &((&ctx.cfg.move_and_slide).into()),
-        &ctx.cfg.filter,
-    );
-    transform.translation += offset;
+    depenetrate_character(transform, &move_and_slide, state, &ctx);
 }
 
 fn accelerate(velocity: &mut Vec3, wish_velocity: Vec3, acceleration_hz: f32, ctx: &Ctx) {
