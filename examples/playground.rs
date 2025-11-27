@@ -55,36 +55,8 @@ fn main() -> AppExit {
 }
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
-    commands
-        .spawn(SceneRoot(assets.load("maps/playground.map#Scene")))
-        .observe(tweak_materials);
-    commands.spawn((
-        Camera3d::default(),
-        EnvironmentMapLight {
-            diffuse_map: assets.load("environment_maps/voortrekker_interior_1k_diffuse.ktx2"),
-            specular_map: assets.load("environment_maps/voortrekker_interior_1k_specular.ktx2"),
-            intensity: 2000.0,
-            ..default()
-        },
-        Projection::Perspective(PerspectiveProjection {
-            fov: 70.0_f32.to_radians(),
-            ..default()
-        }),
-        Atmosphere::EARTH,
-    ));
-    commands.spawn((
-        Transform::from_xyz(0.0, 1.0, 0.0).looking_at(vec3(1.0, -2.0, -2.0), Vec3::Y),
-        DirectionalLight {
-            shadows_enabled: true,
-            ..default()
-        },
-        CascadeShadowConfigBuilder {
-            maximum_distance: 500.0,
-            overlap_proportion: 0.5,
-            ..default()
-        }
-        .build(),
-    ));
+    commands.spawn(SceneRoot(assets.load("maps/playground.map#Scene")));
+    commands.spawn(Camera3d::default());
 }
 
 #[derive(Component, Reflect, Debug)]
@@ -116,25 +88,11 @@ fn spawn_player(
             CharacterController::default(),
             RigidBody::Kinematic,
             Collider::cylinder(0.7, 1.8),
-            // For debugging
-            CollidingEntities::default(),
         ))
         .id();
     commands
         .entity(camera.into_inner())
         .insert(CharacterControllerCameraOf(player));
-}
-
-fn tweak_materials(
-    ready: On<SceneInstanceReady>,
-    children: Query<&Children>,
-    materials: Query<&MeshMaterial3d<StandardMaterial>>,
-    mut material_assets: ResMut<Assets<StandardMaterial>>,
-) {
-    for mat in materials.iter_many(children.iter_descendants(ready.entity)) {
-        let mat = material_assets.get_mut(mat).unwrap();
-        mat.perceptual_roughness = 0.9;
-    }
 }
 
 #[derive(Component, Default)]

@@ -1,7 +1,14 @@
 //! Common functionality for the examples. This is just aesthetic stuff, you don't need to copy any of this into your own projects.
 
 use avian3d::prelude::*;
-use bevy::prelude::*;
+use bevy::{
+    anti_alias::taa::TemporalAntiAliasing,
+    light::CascadeShadowConfigBuilder,
+    pbr::{Atmosphere, ScreenSpaceAmbientOcclusion},
+    post_process::bloom::Bloom,
+    prelude::*,
+    scene::SceneInstanceReady,
+};
 use bevy_ahoy::{kcc::CharacterControllerState, prelude::*};
 use bevy_ecs::world::FilteredEntityRef;
 use bevy_enhanced_input::prelude::{Release, *};
@@ -15,10 +22,18 @@ impl Plugin for ExampleUtilPlugin {
             .add_systems(Startup, setup_ui)
             .add_systems(
                 Update,
-                (update_debug_text, generate_mipmaps::<StandardMaterial>),
+                (
+                    update_debug_text,
+                    tweak_materials,
+                    generate_mipmaps::<StandardMaterial>,
+                ),
             )
             .add_observer(reset_player)
-            .add_input_context::<DebugInput>();
+            .add_observer(tweak_camera)
+            .add_observer(tweak_directional_light)
+            .add_input_context::<DebugInput>()
+            // For debug printing
+            .register_required_components::<CharacterController, CollidingEntities>();
     }
 }
 
@@ -156,3 +171,69 @@ fn reset_player_inner(
     **velocity = Vec3::ZERO;
     transform.translation = spawner_transform.translation;
 }
+
+fn tweak_materials(
+    mut asset_events: MessageReader<AssetEvent<StandardMaterial>>,
+    mut material_assets: ResMut<Assets<StandardMaterial>>,
+) {
+    for event in asset_events.read() {
+        match event {
+            AssetEvent::LoadedWithDependencies { id } => {
+                let Some(material) = material_assets.get_mut(*id) else {
+                    continue;
+                };
+                material.perceptual_roughness = 0.8;
+            }
+            _ => {}
+        }
+    }
+}
+
+fn tweak_camera(insert: On<Insert, Camera3d>, mut commands: Commands, assets: Res<AssetServer>) {
+    commands.entity(insert.entity).insert((
+        Bloom::default(),
+        EnvironmentMapLight {
+            diffuse_map: assets.load("environment_maps/voortrekker_interior_1k_diffuse.ktx2"),
+            specular_map: assets.load("environment_maps/voortrekker_interior_1k_specular.ktx2"),
+            intensity: 2000.0,
+            ..default()
+        },
+        Projection::Perspective(PerspectiveProjection {
+            fov: 70.0_f32.to_radians(),
+            ..default()
+        }),
+        Atmosphere::EARTH,
+    ));
+}
+
+fn tweak_directional_light(
+    insert: On<Insert, DirectionalLight>,
+    mut commands: Commands,
+    directional_light: Query<(&Transform, &DirectionalLight), Without<Tweaked>>,
+    tweaked: Query<Entity, With<Tweaked>>,
+) {
+    let Ok((transform, light)) = directional_light.get(insert.entity) else {
+        return;
+    };
+    // Can't despawn stuff from scenes in an observer, so let's just make it useless
+    commands.entity(insert.entity).remove::<DirectionalLight>();
+
+    for entity in tweaked.iter() {
+        commands.entity(entity).despawn();
+    }
+    commands.spawn((
+        // The shadow map can only be configured on a freshly spawned light
+        *light,
+        *transform,
+        Tweaked,
+        CascadeShadowConfigBuilder {
+            maximum_distance: 500.0,
+            overlap_proportion: 0.5,
+            ..default()
+        }
+        .build(),
+    ));
+}
+
+#[derive(Component)]
+struct Tweaked;
