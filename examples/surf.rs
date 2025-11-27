@@ -123,6 +123,8 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     CharacterController {
         acceleration_hz: 10.0,
         air_acceleration_hz: 150.0,
+        speed: 6.0,
+        gravity: 23.0,
         ..default()
     },
     RigidBody::Kinematic,
@@ -186,7 +188,7 @@ impl PlayerInput {
                 ),
                 (
                     Action::<RotateCamera>::new(),
-                    Scale::splat(0.04),
+                    Scale::splat(0.03),
                     Bindings::spawn((
                         Spawn(Binding::mouse_motion()),
                         Axial::right_stick()
