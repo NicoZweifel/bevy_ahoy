@@ -5,6 +5,10 @@
 
 A fun 3D Kinematic Character Controller for [Bevy](https://github.com/bevyengine/bevy) + [Avian](https://github.com/avianphysics/avian) + [BEI](https://github.com/simgine/bevy_enhanced_input).
 
+
+<https://github.com/user-attachments/assets/56175a4a-7eda-4a71-9ccf-92d108955b94>
+
+
 ## What does that mean?
 
 *Character controller* means that this crate allows you to move characters in a video game around. This can be either player characters or NPCs.
