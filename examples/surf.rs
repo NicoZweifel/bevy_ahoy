@@ -10,6 +10,7 @@ use bevy::{
 };
 use bevy_ahoy::prelude::*;
 use bevy_enhanced_input::prelude::*;
+use bevy_time::Stopwatch;
 use bevy_trenchbroom::prelude::*;
 use bevy_trenchbroom_avian::AvianPhysicsBackend;
 
@@ -91,11 +92,14 @@ fn main() -> AppExit {
         .add_input_context::<PlayerInput>()
         .add_systems(Startup, setup)
         .add_observer(spawn_player)
+        .add_observer(setup_time)
+        .add_observer(reset_time)
         .add_systems(
             Update,
             (
                 capture_cursor.run_if(input_just_pressed(MouseButton::Left)),
                 release_cursor.run_if(input_just_pressed(KeyCode::Escape)),
+                update_time,
             ),
         )
         .run()
@@ -279,4 +283,35 @@ enum CollisionLayer {
     Default,
     Player,
     Sensor,
+}
+
+#[derive(Component, Default, Deref, DerefMut)]
+struct TimeText(Stopwatch);
+
+fn setup_time(_add: On<Add, Player>, mut commands: Commands) {
+    commands.spawn((
+        Node {
+            justify_self: JustifySelf::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        Text::new("Time: 00:00:000"),
+        TimeText::default(),
+    ));
+}
+
+fn update_time(mut time_texts: Query<(&mut Text, &mut TimeText)>, time: Res<Time>) {
+    for (mut text, mut stopwatch) in time_texts.iter_mut() {
+        stopwatch.tick(time.delta());
+        text.0 = format!(
+            "Time: {:02}:{:02}:{:03}",
+            stopwatch.elapsed().as_secs() / 60,
+            stopwatch.elapsed().as_millis() / 1000,
+            stopwatch.elapsed().as_millis() % 1000
+        );
+    }
+}
+
+fn reset_time(_reset: On<Fire<util::Reset>>, mut stopwatch: Single<&mut TimeText>) {
+    stopwatch.reset();
 }
