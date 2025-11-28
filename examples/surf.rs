@@ -310,7 +310,7 @@ fn update_time(mut time_texts: Query<(&mut Text, &mut TimeText)>, time: Res<Time
         text.0 = format!(
             "Time: {:02}:{:02}:{:03}",
             stopwatch.elapsed().as_secs() / 60,
-            stopwatch.elapsed().as_millis() / 1000,
+            stopwatch.elapsed().as_secs() % 60,
             stopwatch.elapsed().as_millis() % 1000
         );
     }
