@@ -239,7 +239,7 @@ fn run_kcc(
             );
         }
 
-        update_grounded(&mut transform, &velocity, &move_and_slide, &mut state, &ctx);
+        update_grounded(&transform, &velocity, &move_and_slide, &mut state, &ctx);
         validate_velocity(&mut velocity, &ctx);
 
         finish_gravity(&mut velocity, &ctx);
@@ -247,6 +247,7 @@ fn run_kcc(
         if state.grounded.is_some() {
             velocity.y = 0.0;
         }
+
         state.velocity = **velocity;
         **velocity = Vec3::ZERO;
         // TODO: check_falling();
@@ -436,7 +437,7 @@ fn step_move(
     // use the one that wend further
     let down_dist = down_position.xz().distance_squared(original_position.xz());
     let up_dist = vec_up_pos.xz().distance_squared(original_position.xz());
-    if down_dist > up_dist {
+    if down_dist >= up_dist {
         transform.translation = down_position;
         *velocity = down_velocity;
         state.touching_entities = down_touching_entities;
@@ -539,7 +540,7 @@ fn accelerate(velocity: &mut Vec3, wish_velocity: Vec3, acceleration_hz: f32, ct
 }
 
 fn update_grounded(
-    transform: &mut Transform,
+    transform: &Transform,
     velocity: &Vec3,
     move_and_slide: &MoveAndSlide,
     state: &mut CharacterControllerState,
