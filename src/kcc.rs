@@ -516,30 +516,20 @@ fn set_grounded(
 
     if new_ground.is_none()
         && let Some(old_ground) = old_ground
-        && let Ok((ground_velocity, ang_vel, com, pos, rot)) = colliders.get(old_ground.entity)
+        && let Ok((lin_vel, ang_vel, com, pos, rot)) = colliders.get(old_ground.entity)
     {
-        let axis = old_ground.point1 - ((rot.0 * com.0) + pos.0);
-        let combined_vel = ground_velocity.0 + ang_vel.0.cross(axis);
-        state.base_velocity.y = combined_vel.y;
+        let platform_movement = calculate_platform_movement(
+            transform, old_ground, lin_vel, ang_vel, com, pos, rot, ctx,
+        );
+        state.base_velocity.y = platform_movement.y / ctx.dt;
     } else if let Some(new_ground) = new_ground
         && let Ok((lin_vel, ang_vel, com, pos, rot)) = colliders.get(new_ground.entity)
     {
-        let platform_transform = Transform::IDENTITY
-            .with_translation((rot.0 * com.0) + pos.0)
-            .with_rotation(rot.0);
-        let next_platform_transform = Transform::IDENTITY
-            .with_translation((rot.0 * com.0) + pos.0 + lin_vel.0 * ctx.dt)
-            .with_rotation(Quat::from_scaled_axis(ang_vel.0 * ctx.dt) * rot.0);
-        let mut touch_point = transform.translation;
-        touch_point.y = new_ground.point1.y;
-        let kcc_movement = next_platform_transform.transform_point(
-            platform_transform
-                .compute_affine()
-                .inverse()
-                .transform_point3(touch_point),
-        ) - touch_point;
+        let platform_movement = calculate_platform_movement(
+            transform, new_ground, lin_vel, ang_vel, com, pos, rot, ctx,
+        );
 
-        state.base_velocity = kcc_movement / ctx.dt;
+        state.base_velocity = platform_movement / ctx.dt;
     }
 
     state.grounded = new_ground;
@@ -547,6 +537,34 @@ fn set_grounded(
     if state.grounded.is_some() {
         velocity.y = 0.0;
     }
+}
+
+fn calculate_platform_movement(
+    kcc_transform: Transform,
+    ground: MoveHitData,
+    ground_lin_vel: &LinearVelocity,
+    ground_ang_vel: &AngularVelocity,
+    ground_com: &ComputedCenterOfMass,
+    ground_pos: &Position,
+    ground_rot: &Rotation,
+    ctx: &Ctx,
+) -> Vec3 {
+    let ground_com = (ground_rot.0 * ground_com.0) + ground_pos.0;
+    let platform_transform = Transform::IDENTITY
+        .with_translation(ground_com)
+        .with_rotation(ground_rot.0);
+    let next_platform_transform = Transform::IDENTITY
+        .with_translation(ground_com + ground_lin_vel.0 * ctx.dt)
+        .with_rotation(Quat::from_scaled_axis(ground_ang_vel.0 * ctx.dt) * ground_rot.0);
+    let mut touch_point = kcc_transform.translation;
+    touch_point.y = ground.point1.y;
+    let kcc_movement = next_platform_transform.transform_point(
+        platform_transform
+            .compute_affine()
+            .inverse()
+            .transform_point3(touch_point),
+    ) - touch_point;
+    kcc_movement
 }
 
 fn friction(velocity: &mut Vec3, state: &CharacterControllerState, ctx: &Ctx) {
