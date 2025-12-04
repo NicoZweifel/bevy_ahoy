@@ -301,6 +301,12 @@ fn handle_crane(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) -
         return false;
     };
 
+    if (-wall_hit.normal1).dot(*vel_dir) < ctx.cfg.min_crane_cos {
+        ctx.velocity.0 = original_velocity;
+        ctx.state.crouching = original_crouching;
+        return false;
+    }
+
     // step up
     let cast_dir = Dir3::Y;
     let cast_len = ctx.cfg.crane_height;

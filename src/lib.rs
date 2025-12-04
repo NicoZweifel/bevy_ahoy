@@ -149,6 +149,7 @@ pub struct CharacterController {
     pub mantle_input_buffer: Duration,
     pub min_step_ledge_space: f32,
     pub max_mantle_dist: f32,
+    pub min_crane_cos: f32,
 }
 
 impl Default for CharacterController {
@@ -179,6 +180,7 @@ impl Default for CharacterController {
             max_air_wish_speed: 0.76,
             unground_speed: 10.0,
             step_down_detection_distance: 0.2,
+            min_crane_cos: 0.5,
             min_step_ledge_space: 0.2,
             coyote_time: Duration::from_millis(150),
             jump_input_buffer: Duration::from_millis(150),
