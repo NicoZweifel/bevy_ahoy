@@ -330,7 +330,7 @@ fn handle_crane(
 
     // Move down
     let cast_dir = Dir3::NEG_Y;
-    let cast_len = up_dist - ctx.cfg.step_size + ctx.cfg.move_and_slide.skin_width;
+    let cast_len = up_dist + ctx.cfg.move_and_slide.skin_width;
     let hit = cast_move(cast_dir * cast_len, move_and_slide, ctx);
     let Some(down_dist) = hit.map(|hit| hit.distance) else {
         ctx.transform.translation = original_position;
@@ -595,6 +595,7 @@ fn handle_jump(time: &Time, colliders: &Query<ColliderComponents>, ctx: &mut Ctx
     // v = sqrt( g * 2.0 * 45 )
     let fl_mul = (2.0 * ctx.cfg.gravity * ctx.cfg.jump_height).sqrt();
     ctx.velocity.y = ground_factor * fl_mul;
+    ctx.input.craned = None;
 
     // TODO: Trigger jump event
 }

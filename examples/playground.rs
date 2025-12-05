@@ -255,7 +255,7 @@ fn on_add_prop<T: QuakeClass + Deref<Target = bool>>(mut world: DeferredWorld, c
         ),
         ColliderConstructorHierarchy::new(ColliderConstructor::ConvexHullFromMesh)
             .with_default_layers(CollisionLayers::new(CollisionLayer::Prop, LayerMask::ALL))
-            .with_default_density(100.0),
+            .with_default_density(300.0),
         if dynamic {
             RigidBody::Dynamic
         } else {
