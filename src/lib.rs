@@ -152,6 +152,7 @@ pub struct CharacterController {
     pub min_crane_ledge_space: f32,
     pub max_mantle_dist: f32,
     pub min_crane_cos: f32,
+    pub crane_speed: f32,
 }
 
 impl Default for CharacterController {
@@ -192,6 +193,7 @@ impl Default for CharacterController {
             mantle_input_buffer: Duration::from_millis(150),
             // Measured from navel to second phalanx of index finger.
             max_mantle_dist: 1.15,
+            crane_speed: 10.0,
         }
     }
 }

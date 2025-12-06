@@ -272,6 +272,45 @@ fn handle_crane_movement(
     move_and_slide: &MoveAndSlide,
     ctx: &mut CtxItem,
 ) {
+    ctx.velocity.y = 0.0;
+    ground_accelerate(wish_velocity, ctx.cfg.acceleration_hz, time, ctx);
+    ctx.velocity.y = 0.0;
+
+    let Ok((vel_dir, speed)) = Dir3::new_and_length(ctx.velocity.0) else {
+        ctx.state.in_crane = None;
+        return;
+    };
+    let Some(crane_height) = ctx.state.in_crane else {
+        return;
+    };
+
+    let cast_dir = Vec3::Y;
+    let cast_len = (ctx.cfg.crane_speed * time.delta_secs()).max(crane_height);
+    let top_hit = cast_move(cast_dir * cast_len, move_and_slide, ctx);
+    let travel_dist = top_hit.map(|hit| hit.distance).unwrap_or(cast_len);
+
+    ctx.transform.translation += cast_dir * travel_dist;
+    depenetrate_character(move_and_slide, ctx);
+
+    *ctx.state.in_crane.as_mut().unwrap() = if top_hit.is_some() {
+        0.0
+    } else {
+        (crane_height - travel_dist).max(0.0)
+    };
+
+    if ctx.state.in_crane.unwrap() != 0.0 {
+        return;
+    }
+
+    let cast_dir = vel_dir;
+    let cast_len = ctx.cfg.min_crane_ledge_space;
+    if cast_move(cast_dir * cast_len, move_and_slide, ctx).is_some() {
+        ctx.state.in_crane = None;
+        return;
+    }
+    ctx.transform.translation += cast_dir * speed * time.delta_secs();
+    depenetrate_character(move_and_slide, ctx);
+    ctx.state.in_crane = None;
 }
 
 fn update_in_crane(
@@ -498,6 +537,7 @@ fn update_grounded(
     // TODO: fire ground changed event
 }
 
+#[must_use]
 fn cast_move(
     movement: Vec3,
     move_and_slide: &MoveAndSlide,
@@ -542,6 +582,7 @@ fn set_grounded(
     }
 }
 
+#[must_use]
 fn calculate_platform_movement(
     ground: MoveHitData,
     platform: &ColliderComponentsReadOnlyItem,
@@ -665,6 +706,7 @@ fn validate_velocity(ctx: &mut CtxItem) {
     ctx.velocity.0 = ctx.velocity.clamp_length(0.0, ctx.cfg.max_speed);
 }
 
+#[must_use]
 fn calculate_wish_velocity(cams: &Query<&Transform>, ctx: &CtxItem) -> Vec3 {
     let orientation = ctx
         .cam
