@@ -458,6 +458,7 @@ fn update_in_crane(
     ctx.input.craned = None;
     // Ensure we don't immediately jump on the surface if crane and jump are bound to the same key
     ctx.input.jumped = None;
+    ctx.input.tac = None;
 
     ctx.state.in_crane = Some(crane_height);
 }
@@ -659,16 +660,16 @@ fn handle_jump(
     move_and_slide: &MoveAndSlide,
     ctx: &mut CtxItem,
 ) {
-    let Some(jump_time) = ctx.input.jumped.clone() else {
-        return;
-    };
-    if jump_time.elapsed() > ctx.cfg.jump_input_buffer {
-        return;
-    }
     // Handle tic tacs when we're in the air beyond coyote-time.
     let jumpdir = if ctx.state.grounded.is_none()
         && ctx.state.last_ground.elapsed() > ctx.cfg.coyote_time
     {
+        let Some(tac_time) = ctx.input.tac.clone() else {
+            return;
+        };
+        if tac_time.elapsed() > ctx.cfg.tac_input_buffer {
+            return;
+        }
         if wish_velocity.length_squared() < 0.1
             || ctx.state.last_tac.elapsed() < ctx.cfg.tac_cooldown
         {
@@ -699,11 +700,18 @@ fn handle_jump(
         ctx.velocity.0 -= vel_dot * normal;
         let groundedness = ctx.state.tac_velocity.max(vel_dot).min(1.0);
         ctx.state.tac_velocity = 0.0;
-        let tac_wish = wish_unit - (wish_dot.min(0.0) - 1.0) * normal;
+        let flat_normal = Vec3::new(normal.x, 0.0, normal.z);
+        let tac_wish = wish_unit - (wish_dot.min(0.0) - 1.0) * flat_normal;
         // not sure if this is better (reflection)
         //let tac_wish = wish_unit - (wish_dot.min(0.0) * 2.0) * normal;
         (Vec3::Y * ctx.cfg.tac_jump_factor + tac_wish).normalize() * groundedness
     } else {
+        let Some(jump_time) = ctx.input.jumped.clone() else {
+            return;
+        };
+        if jump_time.elapsed() > ctx.cfg.jump_input_buffer {
+            return;
+        }
         set_grounded(None, colliders, time, ctx);
         // set last_ground to coyote time to make it not jump again after jumping ungrounds us
         ctx.state.last_ground.set_elapsed(ctx.cfg.coyote_time);
@@ -712,6 +720,7 @@ fn handle_jump(
     ctx.state.last_tac.reset();
 
     ctx.input.jumped = None;
+    ctx.input.tac = None;
 
     // TODO: read ground's jump factor
     let ground_factor = 1.0;

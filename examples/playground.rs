@@ -162,11 +162,21 @@ impl PlayerInput {
                     ],
                 ),
                 (
+                    Action::<Tac>::new(),
+                    Hold::new(0.2),
+                    bindings![
+                        KeyCode::Space,
+                        GamepadButton::South,
+                        Binding::mouse_wheel(),
+                    ],
+                ),
+                (
                     Action::<Crane>::new(),
                     Press::default(),
                     bindings![
                         KeyCode::Space,
                         GamepadButton::South,
+                        Binding::mouse_wheel(),
                     ],
                 ),
                 (
@@ -175,6 +185,7 @@ impl PlayerInput {
                     bindings![
                         KeyCode::Space,
                         GamepadButton::South,
+                        Binding::mouse_wheel(),
                     ],
                 ),
                 (
