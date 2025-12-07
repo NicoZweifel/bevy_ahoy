@@ -712,7 +712,6 @@ fn handle_jump(
     ctx.state.last_tac.reset();
 
     ctx.input.jumped = None;
-    tracing::info!("jump");
 
     // TODO: read ground's jump factor
     let ground_factor = 1.0;
