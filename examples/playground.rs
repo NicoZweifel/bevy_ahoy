@@ -165,6 +165,7 @@ impl PlayerInput {
                 ),
                 (
                     Action::<Tac>::new(),
+                    ActionSettings { consume_input: false, ..default() },
                     Press::default(),
                     bindings![
                         KeyCode::Space,
