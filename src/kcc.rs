@@ -364,9 +364,16 @@ fn handle_mantle_movement(
     let Some(mantle_height) = ctx.state.mantle_height_left else {
         return;
     };
+
+    let Ok(wish_dir) = Dir3::new(wish_velocity) else {
+        // Standing still
+        return;
+    };
+    let original_velocity = *ctx.velocity;
+
     ctx.state.last_step_up.reset();
     ctx.velocity.y = 0.0;
-    ground_accelerate(wish_velocity, ctx.cfg.acceleration_hz, time, ctx);
+    //ground_accelerate(wish_velocity, ctx.cfg.acceleration_hz, time, ctx);
     ctx.velocity.y = 0.0;
     ctx.velocity.0 += ctx.state.base_velocity;
 
@@ -393,11 +400,7 @@ fn handle_mantle_movement(
         // floating in air, bail
         ctx.state.mantle_height_left = None;
         ctx.velocity.0 -= ctx.state.base_velocity;
-        return;
-    };
-
-    let Ok(wish_dir) = Dir3::new(wish_velocity) else {
-        // Standing still
+        info!("a');");
         return;
     };
 
@@ -422,7 +425,9 @@ fn handle_mantle_movement(
 
     if ctx.state.mantle_height_left.unwrap() != 0.0 {
         let cast_len = ctx.cfg.min_mantle_ledge_space;
-        if cast_move(wish_dir * cast_len, move_and_slide, ctx).is_none() {
+        if wish_dir.dot(*wall_normal) < -0.01
+            && cast_move(wish_dir * cast_len, move_and_slide, ctx).is_none()
+        {
             ctx.transform.translation += wish_dir * cast_len * time.delta_secs();
             depenetrate_character(move_and_slide, ctx);
             ctx.state.mantle_height_left = None;
