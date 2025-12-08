@@ -440,12 +440,32 @@ fn available_crane_height(
     move_and_slide: &MoveAndSlide,
     ctx: &mut CtxItem,
 ) -> Option<f32> {
+    available_ledge_height(
+        wish_velocity,
+        ctx.cfg.min_crane_ledge_space,
+        ctx.cfg.min_crane_cos,
+        ctx.cfg.crane_height,
+        time,
+        move_and_slide,
+        ctx,
+    )
+}
+
+fn available_ledge_height(
+    wish_velocity: Vec3,
+    min_depth: f32,
+    min_cos: f32,
+    max_height: f32,
+    time: &Time,
+    move_and_slide: &MoveAndSlide,
+    ctx: &mut CtxItem,
+) -> Option<f32> {
     let original_position = ctx.transform.translation;
     let original_velocity = ctx.velocity.0;
 
     let wish_dir = if let Ok(wish_dir) = Dir3::new(wish_velocity) {
         wish_dir
-    } else if let Ok(vel_dir) = Dir3::new(ctx.velocity.0) {
+    } else if let Ok(vel_dir) = Dir3::new(vec3(ctx.velocity.0.x, 0.0, ctx.velocity.0.z)) {
         vel_dir
     } else {
         ctx.velocity.0 = original_velocity;
@@ -459,7 +479,7 @@ fn available_crane_height(
 
     // Check wall
     let cast_dir = wish_dir;
-    let cast_len = ctx.cfg.min_crane_ledge_space;
+    let cast_len = min_depth;
     let Some(wall_hit) = cast_move(cast_dir * cast_len, move_and_slide, ctx) else {
         // nothing to move onto
         ctx.velocity.0 = original_velocity;
@@ -467,14 +487,14 @@ fn available_crane_height(
     };
     let wall_normal = vec3(wall_hit.normal1.x, 0.0, wall_hit.normal1.z).normalize_or_zero();
 
-    if (-wall_normal).dot(*wish_dir) < ctx.cfg.min_crane_cos {
+    if (-wall_normal).dot(*wish_dir) < min_cos {
         ctx.velocity.0 = original_velocity;
         return None;
     }
 
     // step up
     let cast_dir = Dir3::Y;
-    let cast_len = ctx.cfg.crane_height;
+    let cast_len = max_height;
 
     let hit = cast_move(cast_dir * cast_len, move_and_slide, ctx);
 
@@ -482,7 +502,7 @@ fn available_crane_height(
     ctx.transform.translation += cast_dir * up_dist;
 
     // Move onto ledge (penetration explicitly allowed since the ledge can be below a wall)
-    ctx.transform.translation += -wall_normal * ctx.cfg.min_crane_ledge_space;
+    ctx.transform.translation += -wall_normal * min_depth;
 
     // Move down
     let cast_dir = Dir3::NEG_Y;
@@ -494,19 +514,19 @@ fn available_crane_height(
         ctx.velocity.0 = original_velocity;
         return None;
     };
-    let crane_height = up_dist - down_dist;
+    let ledge_height = up_dist - down_dist;
 
-    // Okay, we found a potentially craneable ledge!
+    // Okay, we found a potentially ledge!
     ctx.transform.translation = original_position;
 
     // step up
-    ctx.transform.translation.y += crane_height;
+    ctx.transform.translation.y += ledge_height;
 
-    // check the full crane
+    // check the full climb
 
     // make sure we have enough space to land
     let cast_dir = -wall_normal;
-    let cast_len = ctx.cfg.min_crane_ledge_space;
+    let cast_len = min_depth;
     if cast_move(cast_dir * cast_len, move_and_slide, ctx).is_some() {
         ctx.transform.translation = original_position;
         ctx.velocity.0 = original_velocity;
@@ -515,10 +535,10 @@ fn available_crane_height(
     ctx.transform.translation += cast_dir * cast_len;
 
     let cast_dir = Dir3::NEG_Y;
-    let cast_len = crane_height;
+    let cast_len = ledge_height;
     let hit = cast_move(cast_dir * cast_len, move_and_slide, ctx);
 
-    // If this doesn't hit, our crane was actually going through geometry. Bail.
+    // If this doesn't hit, our climb was actually going through geometry. Bail.
     let Some(hit) = hit else {
         ctx.transform.translation = original_position;
         ctx.velocity.0 = original_velocity;
@@ -530,11 +550,11 @@ fn available_crane_height(
         return None;
     }
 
-    // Reset KCC from speculative crane to actual current state
+    // Reset KCC from speculative climb to actual current state
     ctx.transform.translation = original_position;
     ctx.velocity.0 = original_velocity;
 
-    Some(crane_height)
+    Some(ledge_height)
 }
 
 fn update_mantle_state(
