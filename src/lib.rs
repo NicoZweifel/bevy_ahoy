@@ -324,6 +324,7 @@ impl Default for CharacterControllerState {
 #[derive(Clone, Copy, Reflect, Debug)]
 pub struct MantleProgress {
     pub wall_normal: Dir3,
+    pub ledge_position: Vec3,
     pub height_left: f32,
     pub wall_entity: Entity,
 }

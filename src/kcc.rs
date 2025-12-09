@@ -77,7 +77,13 @@ fn run_kcc(
         if ctx.state.crane_height_left.is_some() {
             handle_crane_movement(wish_velocity, &time, &move_and_slide, &mut ctx);
         } else if ctx.state.mantle_progress.is_some() {
-            handle_mantle_movement(wish_velocity_3d, &time, &move_and_slide, &mut ctx);
+            handle_mantle_movement(
+                wish_velocity_3d,
+                &time,
+                &move_and_slide,
+                &colliders,
+                &mut ctx,
+            );
         } else {
             handle_jump(wish_velocity, &time, &colliders, &move_and_slide, &mut ctx);
 
@@ -358,6 +364,7 @@ fn handle_mantle_movement(
     wish_velocity: Vec3,
     time: &Time,
     move_and_slide: &MoveAndSlide,
+    colliders: &Query<ColliderComponents>,
     ctx: &mut CtxItem,
 ) {
     let Some(mantle) = ctx.state.mantle_progress else {
@@ -383,7 +390,17 @@ fn handle_mantle_movement(
         return;
     };
 
-    ctx.state.mantle_progress.unwrap().wall_normal = wall_normal;
+    {
+        let progress = ctx.state.mantle_progress.as_mut().unwrap();
+        progress.wall_normal = wall_normal;
+        progress.ledge_position = hit.point1;
+        progress.wall_entity = hit.entity;
+        if let Ok(platform) = colliders.get(progress.wall_entity) {
+            let platform_movement =
+                calculate_platform_movement(mantle.ledge_position, &platform, time, ctx);
+            ctx.state.base_velocity = platform_movement / time.delta_secs();
+        }
+    }
 
     let climb_dir = Vec3::Y;
     // positive when looking at the wall or above it, negative when looking down
@@ -402,8 +419,9 @@ fn handle_mantle_movement(
     let travel_dist =
         top_hit.map(|hit| hit.distance).unwrap_or(climb_dist.abs()) * climb_dist.signum();
 
-    ctx.velocity.0 = climb_dir * travel_dist / time.delta_secs();
+    ctx.velocity.0 = climb_dir * travel_dist / time.delta_secs() + ctx.state.base_velocity;
     move_character(time, move_and_slide, ctx);
+    ctx.velocity.0 -= ctx.state.base_velocity;
 
     ctx.state.mantle_progress.as_mut().unwrap().height_left = mantle.height_left - travel_dist;
     if climb_dist > 0.0 {
@@ -724,7 +742,12 @@ fn available_mantle_height(
         return None;
     }
 
-    Some((wall_normal, mantle_height))
+    Some(MantleProgress {
+        wall_normal,
+        ledge_position: hit.point1,
+        height_left: mantle_height,
+        wall_entity: hit.entity,
+    })
 }
 
 fn move_character(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) {
@@ -891,12 +914,14 @@ fn set_grounded(
         && let Some(old_ground) = old_ground
         && let Ok(platform) = colliders.get(old_ground.entity)
     {
-        let platform_movement = calculate_platform_movement(old_ground, &platform, time, ctx);
+        let platform_movement =
+            calculate_platform_movement(old_ground.point1, &platform, time, ctx);
         ctx.state.base_velocity = platform_movement / time.delta_secs();
     } else if let Some(new_ground) = new_ground
         && let Ok(platform) = colliders.get(new_ground.entity)
     {
-        let platform_movement = calculate_platform_movement(new_ground, &platform, time, ctx);
+        let platform_movement =
+            calculate_platform_movement(new_ground.point1, &platform, time, ctx);
         ctx.state.base_velocity = platform_movement / time.delta_secs();
     }
 
@@ -909,7 +934,7 @@ fn set_grounded(
 
 #[must_use]
 fn calculate_platform_movement(
-    ground: MoveHitData,
+    ground: Vec3,
     platform: &ColliderComponentsReadOnlyItem,
     time: &Time,
     ctx: &CtxItem,
@@ -924,7 +949,7 @@ fn calculate_platform_movement(
             Quat::from_scaled_axis(platform.ang_vel.0 * time.delta_secs()) * platform.rot.0,
         );
     let mut touch_point = ctx.transform.translation;
-    touch_point.y = ground.point1.y;
+    touch_point.y = ground.y;
 
     next_platform_transform.transform_point(
         platform_transform
