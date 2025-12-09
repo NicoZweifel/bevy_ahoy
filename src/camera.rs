@@ -154,19 +154,15 @@ fn yank_camera(
     let Ok(camera) = cameras.get(trigger.context) else {
         return;
     };
-
     let Ok(camera_of) = camera_ofs.get(camera.get()) else {
         return;
     };
-
     let Ok(mut transform) = transforms.get_mut(camera.get()) else {
         return;
     };
 
     let (mut yaw, pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
-
     let rotation_delta = camera_of.yank_speed * trigger.value * time.delta_secs();
-
     yaw -= rotation_delta;
 
     transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, 0.0);
