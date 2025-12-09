@@ -72,6 +72,10 @@ fn main() -> AppExit {
                 release_cursor.run_if(input_just_pressed(KeyCode::Escape)),
             ),
         )
+        .add_systems(
+            FixedUpdate,
+            update_water.before(AhoySystems::MoveCharacters),
+        )
         .add_systems(FixedUpdate, move_trains)
         .add_observer(spawn_player)
         .run()
@@ -354,5 +358,46 @@ fn move_trains(
 
         let to_corner = corner_transform.translation() - train_transform.translation();
         train_vel.0 = to_corner.normalize_or_zero() * train.speed;
+    }
+}
+
+#[solid_class(base(Transform, Visibility))]
+#[derive(Default, Deref)]
+#[require(Sensor, GlobalTransform, CollisionEventsEnabled)]
+pub struct Water {
+    speed: f32,
+}
+
+fn update_water(
+    mut objects: Query<(Entity, &Collider, &Position, &Rotation, &mut WaterState)>,
+    waters: Query<(&Collider, &Position, &Rotation, &Water)>,
+    collisions: Collisions,
+) {
+    for (object, object_collider, object_position, object_rotation, mut water_state) in &mut objects
+    {
+        water_state.level = WaterLevel::None;
+        water_state.speed = f32::MAX;
+        let waist = **object_position;
+        // HACK: eye height fibbing
+        let eye_height = object_collider.aabb(Vec3::ZERO, Quat::IDENTITY).max.y - 0.2;
+        let eyes = waist + object_rotation * Vec3::Y * eye_height;
+        for contact_pair in collisions.collisions_with(object) {
+            if let Ok((collider, position, rotation, water)) = waters
+                .get(contact_pair.collider1)
+                .or(waters.get(contact_pair.collider2))
+            {
+                water_state.speed = water_state.speed.min(water.speed);
+                let level = if collider.contains_point(*position, *rotation, eyes) {
+                    WaterLevel::Eyes
+                } else if collider.contains_point(*position, *rotation, waist) {
+                    WaterLevel::Waist
+                } else {
+                    WaterLevel::Feet
+                };
+                if level > water_state.level {
+                    water_state.level = level;
+                }
+            }
+        }
     }
 }

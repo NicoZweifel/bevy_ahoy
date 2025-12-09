@@ -16,7 +16,7 @@ pub mod prelude {
     };
 
     pub use crate::{
-        AhoyPlugin, AhoySystems, CharacterController, PickupConfig,
+        AhoyPlugin, AhoySystems, CharacterController, PickupConfig, WaterLevel, WaterState,
         camera::{CharacterControllerCamera, CharacterControllerCameraOf},
         input::{
             Crane, Crouch, DropObject, Jump, Mantle, Movement, PullObject, RotateCamera, Tac,
@@ -115,6 +115,7 @@ pub enum AhoySystems {
     TranslationInterpolation,
     RigidBody = RigidBody::Kinematic,
     Collider = Collider::cylinder(0.7, 1.8),
+    WaterState,
     CustomPositionIntegration,
     Transform,
     SpeculativeMargin::ZERO,
@@ -390,6 +391,22 @@ impl CharacterControllerState {
             }
         }
     }
+}
+
+#[derive(Component, Default, Copy, Reflect, Clone, Debug)]
+#[reflect(Component)]
+pub struct WaterState {
+    pub level: WaterLevel,
+    pub speed: f32,
+}
+
+#[derive(Default, Copy, Reflect, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum WaterLevel {
+    #[default]
+    None,
+    Feet,
+    Waist,
+    Eyes,
 }
 
 /// Data related to a hit during [`MoveAndSlide::move_and_slide`].

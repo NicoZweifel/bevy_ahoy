@@ -25,6 +25,7 @@ struct Ctx {
     transform: Write<Transform>,
     input: Write<AccumulatedInput>,
     cfg: Read<CharacterController>,
+    water_level: Read<WaterState>,
     cam: Option<Read<CharacterControllerCamera>>,
 }
 
