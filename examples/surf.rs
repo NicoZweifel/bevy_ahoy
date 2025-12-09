@@ -180,12 +180,10 @@ impl PlayerInput {
                 ),
                 (
                     Action::<Right>::new(),
-                    Scale::splat(0.05),
                     bindings![MouseButton::Right],
                 ),
                 (
                     Action::<Left>::new(),
-                    Scale::splat(0.05),
                     bindings![MouseButton::Left],
                 ),
                 (
