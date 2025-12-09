@@ -21,7 +21,7 @@ bevy_math = { version = "0.17", default-features = false }
 bevy_reflect = { version = "0.17", default-features = false }
 bevy_transform = { version = "0.17", default-features = false }
 bevy_time = { version = "0.17", default-features = false }
-bevy_enhanced_input = { version = "0.19.3", default-features = false }
+bevy_enhanced_input = { version = "0.20", default-features = false }
 tracing = { version = "0.1", default-features = false }
 avian_pickup = { version= "0.3.0" }
 
