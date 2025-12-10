@@ -1119,7 +1119,7 @@ fn handle_jump(
     let jumpdir =
         if ctx.state.grounded.is_none() && ctx.state.last_ground.elapsed() > ctx.cfg.coyote_time {
             if let Some(tac_dir) = handle_tac(wish_velocity, time, move_and_slide, ctx) {
-                dbg!(tac_dir)
+                tac_dir
             } else if let Some(ledge_jump_dir) = handle_ledge_jump_dir(ctx) {
                 ledge_jump_dir
             } else {
