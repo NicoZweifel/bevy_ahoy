@@ -46,11 +46,14 @@ fn run_kcc(
     move_and_slide: MoveAndSlide,
     // TODO: allow this to be other KCCs
     colliders: Query<ColliderComponents, Without<CharacterController>>,
+    waters: Query<Entity, With<Water>>,
 ) {
     let mut colliders = colliders.transmute_lens_inner();
     let colliders = colliders.query();
     let mut cams = cams.transmute_lens_inner();
     let cams = cams.query();
+    let mut waters = waters.transmute_lens_inner();
+    let waters = waters.query();
     for mut ctx in &mut kccs {
         ctx.state.touching_entities.clear();
         ctx.state.last_ground.tick(time.delta());
@@ -61,7 +64,7 @@ fn run_kcc(
         depenetrate_character(&move_and_slide, &mut ctx);
         update_grounded(&move_and_slide, &colliders, &time, &mut ctx);
 
-        handle_crouching(&move_and_slide, &mut ctx);
+        handle_crouching(&move_and_slide, &waters, &mut ctx);
 
         if ctx.water.level <= WaterLevel::Touching {
             // here we'd handle things like spectator, dead, noclip, etc.
@@ -1197,19 +1200,19 @@ fn calculate_3d_wish_velocity(_cams: &Query<&Transform>, ctx: &CtxItem) -> Vec3 
     wish_dir * speed
 }
 
-fn handle_crouching(move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) {
+fn handle_crouching(move_and_slide: &MoveAndSlide, waters: &Query<Entity>, ctx: &mut CtxItem) {
     if ctx.input.crouched {
         ctx.state.crouching = true;
     } else if ctx.state.crouching {
         // try to stand up
         ctx.state.crouching = false;
-        let is_intersecting = is_intersecting(move_and_slide, ctx);
+        let is_intersecting = is_intersecting(move_and_slide, waters, ctx);
         ctx.state.crouching = is_intersecting;
     }
 }
 
 #[must_use]
-fn is_intersecting(move_and_slide: &MoveAndSlide, ctx: &CtxItem) -> bool {
+fn is_intersecting(move_and_slide: &MoveAndSlide, waters: &Query<Entity>, ctx: &CtxItem) -> bool {
     let mut intersecting = false;
     // No need to worry about skin width, depenetration will take care of it.
     // If we used skin width, we could not stand up if we are closer than skin width to the ground,
@@ -1219,7 +1222,10 @@ fn is_intersecting(move_and_slide: &MoveAndSlide, ctx: &CtxItem) -> bool {
         ctx.transform.translation,
         ctx.transform.rotation,
         &ctx.cfg.filter,
-        |_| {
+        |e| {
+            if waters.contains(e) {
+                return true;
+            }
             intersecting = true;
             false
         },
