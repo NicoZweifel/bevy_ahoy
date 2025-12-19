@@ -86,7 +86,11 @@ pub(crate) fn sync_camera_transform(
                 .size()
                 .y;
             let view_height = if state.crouching {
-                cfg.crouch_view_height
+                if state.grounded.is_some() {
+                    cfg.crouch_view_height
+                } else {
+                    cfg.jump_crouch_view_height
+                }
             } else {
                 cfg.standing_view_height
             };
