@@ -38,6 +38,9 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
         .spawn((
             // Add the character controller configuration. We'll use the default settings for now.
             CharacterController::default(),
+            // The KCC currently behaves best when using a cylinder
+            Collider::cylinder(0.7, 1.8),
+            Transform::from_xyz(0.0, 20.0, 0.0),
             // Configure inputs. The actions `Movement`, `Jump`, etc. are provided by Ahoy, you just need to bind them.
             PlayerInput,
             actions!(PlayerInput[
@@ -68,7 +71,6 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
                     ))
                 ),
             ]),
-            Transform::from_xyz(0.0, 20.0, 0.0),
         ))
         .id();
 
