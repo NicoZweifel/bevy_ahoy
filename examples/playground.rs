@@ -369,9 +369,14 @@ fn move_trains(
 
 #[solid_class(base(Transform, Visibility))]
 #[component(on_add = on_add_water)]
-#[derive(Default)]
 pub struct Water {
     speed: f32,
+}
+
+impl Default for Water {
+    fn default() -> Self {
+        Self { speed: 1.0 }
+    }
 }
 
 fn on_add_water(mut world: DeferredWorld, ctx: HookContext) {

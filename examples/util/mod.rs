@@ -222,20 +222,6 @@ fn reset_player_inner(
     camera_transform.rotation = Quat::IDENTITY;
 }
 
-fn tweak_materials(
-    mut asset_events: MessageReader<AssetEvent<StandardMaterial>>,
-    mut material_assets: ResMut<Assets<StandardMaterial>>,
-) {
-    for event in asset_events.read() {
-        if let AssetEvent::LoadedWithDependencies { id } = event {
-            let Some(material) = material_assets.get_mut(*id) else {
-                continue;
-            };
-            material.perceptual_roughness = 0.8;
-        }
-    }
-}
-
 fn tweak_camera(insert: On<Insert, Camera3d>, mut commands: Commands, assets: Res<AssetServer>) {
     commands.entity(insert.entity).insert((
         EnvironmentMapLight {
@@ -331,4 +317,39 @@ fn spawn_crosshair(mut commands: Commands, asset_server: Res<AssetServer>) {
             parent
                 .spawn(ImageNode::new(crosshair_texture).with_color(Color::WHITE.with_alpha(0.3)));
         });
+}
+
+fn tweak_materials(
+    mut asset_events: MessageReader<AssetEvent<StandardMaterial>>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
+    assets: Res<AssetServer>,
+) {
+    for event in asset_events.read() {
+        let AssetEvent::LoadedWithDependencies { id } = event else {
+            continue;
+        };
+        let Some(mat) = mats.get_mut(*id) else {
+            continue;
+        };
+        if mat
+            .base_color_texture
+            .as_ref()
+            .and_then(|t| {
+                assets
+                    .get_path(t.id())?
+                    .path()
+                    .file_name()?
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .into()
+            })
+            .is_some_and(|name| name.contains("water_01"))
+        {
+            mat.base_color = Color::WHITE.with_alpha(0.85);
+            mat.perceptual_roughness = 0.2;
+            mat.alpha_mode = AlphaMode::Blend;
+        } else {
+            mat.perceptual_roughness = 0.8;
+        }
+    }
 }
