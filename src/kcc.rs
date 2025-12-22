@@ -33,9 +33,9 @@ struct Ctx {
 #[derive(QueryData)]
 #[query_data(mutable, derive(Debug))]
 struct ColliderComponents {
-    lin_vel: Read<LinearVelocity>,
-    ang_vel: Read<AngularVelocity>,
-    com: Read<ComputedCenterOfMass>,
+    lin_vel: Option<Read<LinearVelocity>>,
+    ang_vel: Option<Read<AngularVelocity>>,
+    com: Option<Read<ComputedCenterOfMass>>,
     pos: Read<Position>,
     rot: Read<Rotation>,
 }
