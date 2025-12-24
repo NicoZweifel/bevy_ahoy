@@ -210,19 +210,19 @@ impl PlayerInput {
                 ),
                 (
                     Action::<PullObject>::new(),
-                    ActionSettings { consume_input: false, ..default() },
+                    ActionSettings { consume_input: true, ..default() },
                     Press::default(),
                     bindings![MouseButton::Right],
                 ),
                 (
                     Action::<DropObject>::new(),
-                    ActionSettings { consume_input: false, ..default() },
+                    ActionSettings { consume_input: true, ..default() },
                     Press::default(),
                     bindings![MouseButton::Right],
                 ),
                 (
                     Action::<ThrowObject>::new(),
-                    ActionSettings { consume_input: false, ..default() },
+                    ActionSettings { consume_input: true, ..default() },
                     Press::default(),
                     bindings![MouseButton::Left],
                 ),
