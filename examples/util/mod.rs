@@ -238,16 +238,6 @@ fn tweak_camera(insert: On<Insert, Camera3d>, mut commands: Commands, assets: Re
         Atmosphere::EARTH,
         Exposure { ev100: 9.0 },
         Bloom::default(),
-        DistanceFog {
-            color: Color::srgba(0.35, 0.48, 0.66, 0.4),
-            directional_light_color: Color::srgba(1.0, 0.95, 0.85, 0.5),
-            directional_light_exponent: 30.0,
-            falloff: FogFalloff::from_visibility_colors(
-                600.0, // distance in world units up to which objects retain visibility (>= 5% contrast)
-                Color::srgb(0.35, 0.5, 0.66), // atmospheric extinction color (after light is lost due to absorption by atmospheric particles)
-                Color::srgb(0.8, 0.844, 1.0), // atmospheric inscattering color (light gained due to scattering from the sun)
-            ),
-        },
     ));
 }
 
