@@ -12,7 +12,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
-use bevy_ahoy::{CharacterControllerState, prelude::*};
+use bevy_ahoy::{CharacterControllerOutput, CharacterControllerState, prelude::*};
 use bevy_ecs::world::FilteredEntityRef;
 use bevy_enhanced_input::prelude::{Release, *};
 use bevy_fix_cursor_unlock_web::{FixPointerUnlockPlugin, ForceUnlockCursor};
@@ -54,6 +54,7 @@ fn update_debug_text(
     kcc: Single<
         (
             &CharacterControllerState,
+            &CharacterControllerOutput,
             &LinearVelocity,
             &CollidingEntities,
             &ColliderAabb,
@@ -63,14 +64,14 @@ fn update_debug_text(
     camera: Single<&Transform, With<Camera>>,
     names: Query<NameOrEntity>,
 ) {
-    let (state, velocity, colliding_entities, aabb) = kcc.into_inner();
+    let (state, output, velocity, colliding_entities, aabb) = kcc.into_inner();
     let velocity = **velocity;
     let speed = velocity.length();
     let horizontal_speed = velocity.xz().length();
     let camera_position = camera.translation;
     let collisions = names
         .iter_many(
-            state
+            output
                 .touching_entities
                 .iter()
                 .map(|e| e.entity)

@@ -115,6 +115,8 @@ pub enum AhoySystems {
 #[require(
     AccumulatedInput,
     CharacterControllerState,
+    CharacterControllerDerivedProps,
+    CharacterControllerOutput,
     TranslationInterpolation,
     RigidBody = RigidBody::Kinematic,
     WaterState,
@@ -265,11 +267,11 @@ fn setup_collider(
     In(entity): In<Entity>,
     mut kcc: Query<(
         &mut CharacterController,
-        &mut CharacterControllerState,
+        &mut CharacterControllerDerivedProps,
         &Collider,
     )>,
 ) {
-    let Ok((mut cfg, mut state, collider)) = kcc.get_mut(entity) else {
+    let Ok((mut cfg, mut derived, collider)) = kcc.get_mut(entity) else {
         return;
     };
     cfg.filter.excluded_entities.add(entity);
@@ -277,12 +279,12 @@ fn setup_collider(
     let standing_aabb = collider.aabb(default(), Rotation::default());
     let standing_height = standing_aabb.max.y - standing_aabb.min.y;
 
-    state.standing_collider = collider.clone();
+    derived.standing_collider = collider.clone();
 
     let frac = cfg.crouch_height / standing_height;
 
     let mut crouching_collider = Collider::from(SharedShape(Arc::from(
-        state.standing_collider.shape().clone_dyn(),
+        derived.standing_collider.shape().clone_dyn(),
     )));
 
     if crouching_collider.shape().as_capsule().is_some() {
@@ -299,13 +301,13 @@ fn setup_collider(
         crouching_collider.set_scale(vec3(1.0, frac, 1.0), 16);
     }
 
-    state.crouching_collider = Collider::compound(vec![(
+    derived.crouching_collider = Collider::compound(vec![(
         Vec3::Y * (cfg.crouch_height - standing_height) / 2.0,
         Rotation::default(),
         crouching_collider,
     )]);
 
-    state.hand_collider = Collider::from(cfg.min_ledge_grab_space);
+    derived.hand_collider = Collider::from(cfg.min_ledge_grab_space);
 }
 
 #[derive(Component, Clone, Reflect, Debug)]
@@ -318,22 +320,18 @@ pub struct CharacterControllerState {
     /// The angular velocity of the platform that the character is standing on (or has recently
     /// jumped off of).
     pub platform_angular_velocity: Vec3,
-    #[reflect(ignore)]
-    pub standing_collider: Collider,
-    #[reflect(ignore)]
-    pub crouching_collider: Collider,
-    #[reflect(ignore)]
-    pub hand_collider: Collider,
     pub grounded: Option<MoveHitData>,
     pub crouching: bool,
     pub tac_velocity: f32,
-    pub touching_entities: Vec<TouchingEntity>,
     pub last_ground: Stopwatch,
     pub last_tac: Stopwatch,
     pub last_step_up: Stopwatch,
     pub last_step_down: Stopwatch,
     pub crane_height_left: Option<f32>,
-    pub mantle_progress: Option<MantleProgress>,
+    /// The current state of the mantle, if a mantle is in progress.
+    ///
+    /// This is [`None`] if a mantle is not in progress.
+    pub mantle: Option<MantleState>,
 }
 
 impl Default for CharacterControllerState {
@@ -342,30 +340,23 @@ impl Default for CharacterControllerState {
             platform_velocity: Vec3::ZERO,
             platform_angular_velocity: Vec3::ZERO,
             orientation: Quat::IDENTITY,
-            // late initialized
-            standing_collider: default(),
-            crouching_collider: default(),
-            hand_collider: default(),
             grounded: None,
             crouching: false,
             tac_velocity: 0.0,
-            touching_entities: Vec::new(),
             last_ground: max_stopwatch(),
             last_tac: max_stopwatch(),
             last_step_up: max_stopwatch(),
             last_step_down: max_stopwatch(),
             crane_height_left: None,
-            mantle_progress: None,
+            mantle: None,
         }
     }
 }
 
-#[derive(Clone, Copy, Reflect, Debug)]
-pub struct MantleProgress {
-    pub wall_normal: Dir3,
-    pub ledge_position: Vec3,
+/// The state of a mantle in progress.
+#[derive(Clone, Reflect, Debug)]
+pub struct MantleState {
     pub height_left: f32,
-    pub wall_entity: Entity,
 }
 
 fn max_stopwatch() -> Stopwatch {
@@ -374,25 +365,44 @@ fn max_stopwatch() -> Stopwatch {
     watch
 }
 
-impl CharacterControllerState {
-    pub fn collider(&self) -> &Collider {
-        if self.crouching {
+/// Properties derived for a [`CharacterController`] that are constant for a character.
+#[derive(Component, Clone, Debug, Default)]
+pub struct CharacterControllerDerivedProps {
+    /// The collider for the primary movement used when the character is standing.
+    pub standing_collider: Collider,
+    /// The collider for the primary movement used when the character is crouching.
+    pub crouching_collider: Collider,
+    /// The collider representing the hands for mantling.
+    pub hand_collider: Collider,
+}
+
+impl CharacterControllerDerivedProps {
+    pub fn collider(&self, state: &CharacterControllerState) -> &Collider {
+        if state.crouching {
             &self.crouching_collider
         } else {
             &self.standing_collider
         }
     }
 
-    pub fn pos_to_head_dist(&self) -> f32 {
-        self.collider().shape_scaled().compute_local_aabb().maxs.y
+    pub fn pos_to_head_dist(&self, state: &CharacterControllerState) -> f32 {
+        self.collider(state)
+            .shape_scaled()
+            .compute_local_aabb()
+            .maxs
+            .y
     }
 
-    pub fn pos_to_feet_dist(&self) -> f32 {
-        self.collider().shape_scaled().compute_local_aabb().mins.y
+    pub fn pos_to_feet_dist(&self, state: &CharacterControllerState) -> f32 {
+        self.collider(state)
+            .shape_scaled()
+            .compute_local_aabb()
+            .mins
+            .y
     }
 
-    pub fn radius(&self) -> f32 {
-        match self.collider().shape_scaled().as_typed_shape() {
+    pub fn radius(&self, state: &CharacterControllerState) -> f32 {
+        match self.collider(state).shape_scaled().as_typed_shape() {
             avian3d::parry::shape::TypedShape::Ball(ball) => ball.radius,
             avian3d::parry::shape::TypedShape::Cuboid(cuboid) => cuboid.half_extents.max(),
             avian3d::parry::shape::TypedShape::Capsule(capsule) => capsule.radius,
@@ -439,6 +449,34 @@ impl CharacterControllerState {
             }
         }
     }
+}
+
+/// Properties computed during movement useful for gameplay systems.
+///
+/// Note this only includes results that are "transient" for a frame (or in other words, is
+/// exclusively an output). For example, while "crouching" is technically a result of movement, it
+/// is also used as input in the next frame.
+#[derive(Component, Reflect, PartialEq, Debug, Default)]
+pub struct CharacterControllerOutput {
+    /// Details about an in progress mantle.
+    ///
+    /// This is [`None`] if a mantle is not in progress.
+    pub mantle: Option<MantleOutput>,
+    /// The entities this character is touching.
+    pub touching_entities: Vec<TouchingEntity>,
+}
+
+/// Properties computing while mantling.
+///
+/// These are properties about the mantle that are transient and are not needed for future updates.
+#[derive(Clone, Reflect, PartialEq, Debug)]
+pub struct MantleOutput {
+    /// The normal of the wall being mantled.
+    pub wall_normal: Dir3,
+    /// The position of the ledge on the wall.
+    pub ledge_position: Vec3,
+    /// The wall that is being mantled.
+    pub wall_entity: Entity,
 }
 
 /// Data related to a hit during [`MoveAndSlide::move_and_slide`].

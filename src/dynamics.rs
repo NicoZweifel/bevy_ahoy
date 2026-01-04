@@ -1,6 +1,6 @@
 use bevy_ecs::{intern::Interned, schedule::ScheduleLabel};
 
-use crate::{CharacterControllerState, prelude::*};
+use crate::{CharacterControllerOutput, prelude::*};
 
 pub(super) fn plugin(schedule: Interned<dyn ScheduleLabel>) -> impl Fn(&mut App) {
     move |app: &mut App| {
@@ -12,13 +12,13 @@ pub(super) fn plugin(schedule: Interned<dyn ScheduleLabel>) -> impl Fn(&mut App)
 }
 
 fn apply_forces(
-    kccs: Query<(&ComputedMass, &CharacterControllerState)>,
+    kccs: Query<(&ComputedMass, &CharacterControllerOutput)>,
     colliders: Query<&ColliderOf>,
     mut rigid_bodies: Query<(&RigidBody, Forces)>,
 ) {
-    for (mass, state) in &kccs {
+    for (mass, output) in &kccs {
         let mass = mass.value();
-        for touch in &state.touching_entities {
+        for touch in &output.touching_entities {
             let Ok(collider_of) = colliders.get(touch.entity) else {
                 continue;
             };

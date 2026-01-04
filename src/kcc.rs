@@ -9,7 +9,10 @@ use core::fmt::Debug;
 use core::time::Duration;
 use tracing::warn;
 
-use crate::{CharacterControllerState, MantleProgress, input::AccumulatedInput, prelude::*};
+use crate::{
+    CharacterControllerDerivedProps, CharacterControllerOutput, CharacterControllerState,
+    MantleOutput, MantleState, input::AccumulatedInput, prelude::*,
+};
 
 pub(super) fn plugin(schedule: Interned<dyn ScheduleLabel>) -> impl Fn(&mut App) {
     move |app: &mut App| {
@@ -23,6 +26,8 @@ pub(super) fn plugin(schedule: Interned<dyn ScheduleLabel>) -> impl Fn(&mut App)
 struct Ctx {
     velocity: Write<LinearVelocity>,
     state: Write<CharacterControllerState>,
+    derived: Read<CharacterControllerDerivedProps>,
+    output: Write<CharacterControllerOutput>,
     transform: Write<Transform>,
     input: Write<AccumulatedInput>,
     cfg: Read<CharacterController>,
@@ -64,7 +69,8 @@ fn run_kcc(
     let mut waters = waters.transmute_lens_inner();
     let waters = waters.query();
     for mut ctx in &mut kccs {
-        ctx.state.touching_entities.clear();
+        ctx.output.mantle = None;
+        ctx.output.touching_entities.clear();
         ctx.state.last_ground.tick(time.delta());
         ctx.state.last_tac.tick(time.delta());
         ctx.state.last_step_up.tick(time.delta());
@@ -92,7 +98,7 @@ fn run_kcc(
         update_mantle_state(wish_velocity, &time, &move_and_slide, &mut ctx);
         if ctx.state.crane_height_left.is_some() {
             handle_crane_movement(wish_velocity, &time, &move_and_slide, &mut ctx);
-        } else if ctx.state.mantle_progress.is_some() {
+        } else if ctx.state.mantle.is_some() {
             handle_jump(wish_velocity, &time, &colliders, &move_and_slide, &mut ctx);
             handle_mantle_movement(
                 wish_velocity_3d,
@@ -146,7 +152,7 @@ fn run_kcc(
 
 fn depenetrate_character(move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) {
     let offset = move_and_slide.depenetrate(
-        ctx.state.collider(),
+        ctx.derived.collider(&ctx.state),
         ctx.transform.translation,
         ctx.transform.rotation,
         &((&ctx.cfg.move_and_slide).into()),
@@ -278,18 +284,18 @@ fn water_accelerate(wish_velocity: Vec3, acceleration_hz: f32, time: &Time, ctx:
 fn step_move(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) {
     let original_position = ctx.transform.translation;
     let original_velocity = ctx.velocity.0;
-    let original_touching_entities = ctx.state.touching_entities.clone();
+    let original_touching_entities = ctx.output.touching_entities.clone();
 
     // Slide the direct path
     move_character(time, move_and_slide, ctx);
 
-    let down_touching_entities = ctx.state.touching_entities.clone();
+    let down_touching_entities = ctx.output.touching_entities.clone();
     let down_position = ctx.transform.translation;
     let down_velocity = ctx.velocity.0;
 
     ctx.transform.translation = original_position;
     ctx.velocity.0 = original_velocity;
-    ctx.state.touching_entities = original_touching_entities;
+    ctx.output.touching_entities = original_touching_entities;
 
     // step up
     let cast_dir = Dir3::Y;
@@ -309,7 +315,7 @@ fn step_move(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) {
     if hit.is_some() {
         ctx.transform.translation = down_position;
         ctx.velocity.0 = down_velocity;
-        ctx.state.touching_entities = down_touching_entities;
+        ctx.output.touching_entities = down_touching_entities;
         return;
     }
 
@@ -323,7 +329,7 @@ fn step_move(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) {
     if !hit.is_some_and(|h| h.normal1.y >= ctx.cfg.min_walk_cos) {
         ctx.transform.translation = down_position;
         ctx.velocity.0 = down_velocity;
-        ctx.state.touching_entities = down_touching_entities;
+        ctx.output.touching_entities = down_touching_entities;
         return;
     };
     let hit = hit.unwrap();
@@ -338,7 +344,7 @@ fn step_move(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) {
     if down_dist >= up_dist {
         ctx.transform.translation = down_position;
         ctx.velocity.0 = down_velocity;
-        ctx.state.touching_entities = down_touching_entities;
+        ctx.output.touching_entities = down_touching_entities;
     } else {
         ctx.velocity.y = down_velocity.y;
         ctx.state.last_step_up.reset();
@@ -433,7 +439,7 @@ fn handle_mantle_movement(
     colliders: &Query<ColliderComponents>,
     ctx: &mut CtxItem,
 ) {
-    let Some(mantle) = ctx.state.mantle_progress else {
+    let Some(mut mantle_state) = ctx.state.mantle.take() else {
         return;
     };
 
@@ -442,7 +448,7 @@ fn handle_mantle_movement(
     let Some((_wall_point, wall_normal)) =
         closest_wall_normal(ctx.cfg.max_ledge_grab_distance, move_and_slide, ctx)
     else {
-        ctx.state.mantle_progress = None;
+        // Stop mantling if there is no wall close enough to us.
         return;
     };
     let Some(hit) = cast_move(
@@ -450,17 +456,18 @@ fn handle_mantle_movement(
         move_and_slide,
         ctx,
     ) else {
-        ctx.state.mantle_progress = None;
+        // Stop mantling if the nearest wall isn't within the max grab distance.
         return;
     };
 
     {
-        let progress = ctx.state.mantle_progress.as_mut().unwrap();
-        progress.wall_normal = wall_normal;
-        progress.ledge_position = hit.point1;
-        progress.wall_entity = hit.entity;
-        if let Ok(platform) = colliders.get(progress.wall_entity) {
-            calculate_platform_movement(mantle.ledge_position, &platform, time, ctx);
+        let mantle_output = ctx.output.mantle.insert(MantleOutput {
+            wall_normal,
+            ledge_position: hit.point1,
+            wall_entity: hit.entity,
+        });
+        if let Ok(platform) = colliders.get(mantle_output.wall_entity) {
+            calculate_platform_movement(mantle_output.ledge_position, &platform, time, ctx);
         }
     }
 
@@ -468,12 +475,12 @@ fn handle_mantle_movement(
     let wish_y = calc_climb_factor(ctx, wish_velocity);
 
     let mut climb_dist =
-        (ctx.cfg.mantle_speed * time.delta_secs() * wish_y).min(mantle.height_left);
-    if mantle.height_left - climb_dist
+        (ctx.cfg.mantle_speed * time.delta_secs() * wish_y).min(mantle_state.height_left);
+    if mantle_state.height_left - climb_dist
         > ctx.cfg.mantle_height - ctx.cfg.min_ledge_grab_space.size().y
     {
-        climb_dist =
-            mantle.height_left - ctx.cfg.mantle_height + ctx.cfg.min_ledge_grab_space.size().y;
+        climb_dist = mantle_state.height_left - ctx.cfg.mantle_height
+            + ctx.cfg.min_ledge_grab_space.size().y;
     }
 
     let top_hit = cast_move(climb_dir * climb_dist, move_and_slide, ctx);
@@ -484,12 +491,13 @@ fn handle_mantle_movement(
     move_character(time, move_and_slide, ctx);
     ctx.velocity.0 -= ctx.state.platform_velocity;
 
-    ctx.state.mantle_progress.as_mut().unwrap().height_left = mantle.height_left - travel_dist;
+    mantle_state.height_left -= travel_dist;
     if climb_dist > 0.0 {
         ctx.state.last_step_up.reset();
     } else {
         ctx.state.last_step_down.reset();
     }
+    ctx.state.mantle = Some(mantle_state);
 }
 
 fn calc_climb_factor(ctx: &CtxItem, wish_velocity: Vec3) -> f32 {
@@ -529,7 +537,7 @@ fn update_crane_state(
     ctx.input.mantled = None;
     ctx.input.tac = None;
 
-    ctx.state.mantle_progress = None;
+    ctx.state.mantle = None;
     ctx.state.crane_height_left = Some(crane_height);
 }
 
@@ -657,10 +665,10 @@ fn update_mantle_state(
     ctx: &mut CtxItem,
 ) {
     if ctx.state.crane_height_left.is_some() {
-        ctx.state.mantle_progress = None;
+        ctx.state.mantle = None;
         return;
     }
-    if ctx.state.mantle_progress.is_some() {
+    if ctx.state.mantle.is_some() {
         return;
     }
 
@@ -671,7 +679,8 @@ fn update_mantle_state(
         return;
     }
 
-    let Some(mantle_height) = available_mantle_height(wish_velocity, time, move_and_slide, ctx)
+    let Some((mantle_state, mantle_output)) =
+        available_mantle_height(wish_velocity, time, move_and_slide, ctx)
     else {
         return;
     };
@@ -681,7 +690,8 @@ fn update_mantle_state(
     // Ensure we don't immediately jump on the surface if mantle and jump are bound to the same key
     ctx.input.jumped = None;
 
-    ctx.state.mantle_progress = Some(mantle_height);
+    ctx.state.mantle = Some(mantle_state);
+    ctx.output.mantle = Some(mantle_output);
 }
 
 fn available_mantle_height(
@@ -689,7 +699,7 @@ fn available_mantle_height(
     time: &Time,
     move_and_slide: &MoveAndSlide,
     ctx: &mut CtxItem,
-) -> Option<MantleProgress> {
+) -> Option<(MantleState, MantleOutput)> {
     let original_position = ctx.transform.translation;
     let original_velocity = ctx.velocity.0;
 
@@ -737,7 +747,7 @@ fn available_mantle_height(
         .unwrap_or(cast_len);
     ctx.transform.translation += cast_dir * up_dist;
 
-    let radius = ctx.state.radius();
+    let radius = ctx.derived.radius(&ctx.state);
     let hand_to_wall_dist =
         radius + ctx.cfg.move_and_slide.skin_width + ctx.cfg.min_ledge_grab_space.half_size.z;
     // Move onto ledge (penetration explicitly allowed since the ledge can be below a wall)
@@ -788,19 +798,23 @@ fn available_mantle_height(
         return None;
     }
 
-    let kcc_height = ctx.state.pos_to_head_dist();
+    let kcc_height = ctx.derived.pos_to_head_dist(&ctx.state);
     let mantle_height = ledge_height - kcc_height + ctx.cfg.climb_pull_up_height;
 
     if mantle_height < 0.0 {
         return None;
     }
 
-    Some(MantleProgress {
-        wall_normal,
-        ledge_position: hit.point1,
-        height_left: mantle_height,
-        wall_entity: hit.entity,
-    })
+    Some((
+        MantleState {
+            height_left: mantle_height,
+        },
+        MantleOutput {
+            wall_normal,
+            ledge_position: hit.point1,
+            wall_entity: hit.entity,
+        },
+    ))
 }
 
 fn handle_climbdown(
@@ -833,7 +847,8 @@ fn handle_climbdown(
     let original_position = ctx.transform.translation;
     ctx.transform.translation += cast_dir * cast_len;
 
-    let Some(mantle_height) = available_mantle_height(-wish_velocity, time, move_and_slide, ctx)
+    let Some((mantle_state, mantle_output)) =
+        available_mantle_height(-wish_velocity, time, move_and_slide, ctx)
     else {
         ctx.transform.translation = original_position;
         return;
@@ -844,7 +859,8 @@ fn handle_climbdown(
     ctx.input.jumped = None;
     ctx.input.climbdown = None;
 
-    ctx.state.mantle_progress = Some(mantle_height);
+    ctx.state.mantle = Some(mantle_state);
+    ctx.output.mantle = Some(mantle_output);
 }
 
 fn move_character(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) {
@@ -853,9 +869,8 @@ fn move_character(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem)
         config.planes.push(Dir3::new_unchecked(grounded.normal1));
     }
 
-    let mut touching_entities = std::mem::take(&mut ctx.state.touching_entities);
     let out = move_and_slide.move_and_slide(
-        ctx.state.collider(),
+        ctx.derived.collider(&ctx.state),
         ctx.transform.translation,
         ctx.transform.rotation,
         ctx.velocity.0,
@@ -863,7 +878,7 @@ fn move_character(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem)
         &config,
         &ctx.cfg.filter,
         |hit| {
-            touching_entities.push(hit.into());
+            ctx.output.touching_entities.push(hit.into());
             true
         },
     );
@@ -871,7 +886,6 @@ fn move_character(time: &Time, move_and_slide: &MoveAndSlide, ctx: &mut CtxItem)
     ctx.state.tac_velocity = ctx.state.tac_velocity * 0.99 + lost_velocity;
     ctx.transform.translation = out.position;
     ctx.velocity.0 = out.projected_velocity;
-    std::mem::swap(&mut ctx.state.touching_entities, &mut touching_entities);
 }
 
 fn snap_to_ground(move_and_slide: &MoveAndSlide, ctx: &mut CtxItem) {
@@ -914,7 +928,7 @@ fn closest_wall_normal(
 ) -> Option<(Vec3, Dir3)> {
     let mut closest_wall: Option<(ContactPoint, Dir3)> = None;
     move_and_slide.intersections(
-        ctx.state.collider(),
+        ctx.derived.collider(&ctx.state),
         ctx.transform.translation,
         ctx.transform.rotation,
         dist + ctx.cfg.move_and_slide.skin_width,
@@ -976,7 +990,7 @@ fn update_grounded(
 #[must_use]
 fn cast_move(movement: Vec3, move_and_slide: &MoveAndSlide, ctx: &CtxItem) -> Option<MoveHitData> {
     move_and_slide.cast_move(
-        ctx.state.collider(),
+        ctx.derived.collider(&ctx.state),
         ctx.transform.translation,
         ctx.transform.rotation,
         movement,
@@ -992,7 +1006,7 @@ fn cast_move_hands(
     ctx: &CtxItem,
 ) -> Option<MoveHitData> {
     move_and_slide.cast_move(
-        &ctx.state.hand_collider,
+        &ctx.derived.hand_collider,
         ctx.transform.translation,
         ctx.transform.rotation,
         movement,
@@ -1023,7 +1037,7 @@ fn set_grounded(
 
     ctx.state.grounded = new_ground;
     if ctx.state.grounded.is_some() {
-        ctx.state.mantle_progress = None;
+        ctx.state.mantle = None;
     }
 
     if ctx.state.grounded.is_some() {
@@ -1118,7 +1132,7 @@ fn handle_tac(
     move_and_slide: &MoveAndSlide,
     ctx: &mut CtxItem,
 ) -> Option<Vec3> {
-    if ctx.state.mantle_progress.is_some() {
+    if ctx.state.mantle.is_some() {
         return None;
     }
     let tac_time = ctx.input.tac.clone()?;
@@ -1159,7 +1173,7 @@ fn handle_tac(
 }
 
 fn handle_ledge_jump_dir(ctx: &mut CtxItem) -> Option<Vec3> {
-    if ctx.state.mantle_progress.is_none()
+    if ctx.state.mantle.is_none()
         || ctx
             .input
             .mantled
@@ -1176,7 +1190,7 @@ fn handle_ledge_jump_dir(ctx: &mut CtxItem) -> Option<Vec3> {
     } else {
         Dir3::NEG_Y
     };
-    ctx.state.mantle_progress = None;
+    ctx.state.mantle = None;
     Some(tac_dir * ctx.cfg.ledge_jump_power)
 }
 
@@ -1315,7 +1329,7 @@ fn is_intersecting(move_and_slide: &MoveAndSlide, waters: &Query<Entity>, ctx: &
     // If we used skin width, we could not stand up if we are closer than skin width to the ground,
     // which happens when going under a slope.
     move_and_slide.query_pipeline.shape_intersections_callback(
-        ctx.state.collider(),
+        ctx.derived.collider(&ctx.state),
         ctx.transform.translation,
         ctx.transform.rotation,
         &ctx.cfg.filter,
